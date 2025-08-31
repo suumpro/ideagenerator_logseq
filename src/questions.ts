@@ -1,4 +1,5 @@
 import '@logseq/libs';
+import { AdvancedMethodologies, QuantityToQuality } from './methodologies';
 
 interface QuestionPack {
   name: string;
@@ -9,9 +10,13 @@ interface QuestionPack {
 
 export class QuestionFramework {
   private questionPacks: Map<string, QuestionPack> = new Map();
+  private advancedMethodologies: AdvancedMethodologies;
+  private quantityChecker: QuantityToQuality;
 
   constructor() {
     this.initializeQuestionPacks();
+    this.advancedMethodologies = new AdvancedMethodologies();
+    this.quantityChecker = new QuantityToQuality();
   }
 
   private initializeQuestionPacks() {
@@ -74,20 +79,172 @@ ${answers.map((answer, i) => {
   }
 
   async startQuestionFlow(block: any) {
-    const framework = logseq.settings?.questionFramework || 'JTBD';
-    const questionPack = this.questionPacks.get(framework);
+    // Check for quantity-to-quality upgrade first
+    const qualityUpgrade = await this.quantityChecker.checkForQualityUpgrade(block.uuid);
+    if (qualityUpgrade) return;
+
+    // Smart methodology selection
+    const suggestedFramework = this.advancedMethodologies.getMethodologyForContext(
+      block.content, 
+      block.properties
+    );
     
+    const framework = logseq.settings?.questionFramework === 'Auto' 
+      ? suggestedFramework 
+      : (logseq.settings?.questionFramework || 'JTBD');
+
+    // Try advanced methodologies first
+    const methodology = this.advancedMethodologies.getMethodology(framework);
+    if (methodology) {
+      await this.startAdvancedQuestionFlow(block, methodology);
+      return;
+    }
+
+    // Fallback to basic question packs
+    const questionPack = this.questionPacks.get(framework);
     if (!questionPack) {
       logseq.UI.showMsg('알 수 없는 질문 프레임워크입니다.', 'error');
       return;
     }
 
-    // Update block status
     await logseq.Editor.upsertBlockProperty(block.uuid, 'seed-status', 'questioning');
     await logseq.Editor.upsertBlockProperty(block.uuid, 'seed-framework', framework);
-
-    // Start the question sequence
     await this.askNextQuestion(block.uuid, questionPack, 0, []);
+  }
+
+  private async startAdvancedQuestionFlow(block: any, methodology: any) {
+    await logseq.Editor.upsertBlockProperty(block.uuid, 'seed-status', 'questioning');
+    await logseq.Editor.upsertBlockProperty(block.uuid, 'seed-methodology', methodology.name);
+    await logseq.Editor.upsertBlockProperty(block.uuid, 'seed-stage', methodology.stages[0]);
+
+    // Start with first stage questions
+    const questions = typeof methodology.questions.questions === 'function' 
+      ? methodology.questions.questions({ currentStage: 0 })
+      : methodology.questions.questions;
+
+    await this.askAdvancedQuestion(block.uuid, methodology, 0, 0, []);
+  }
+
+  private async askAdvancedQuestion(
+    parentUuid: string,
+    methodology: any,
+    stageIndex: number,
+    questionIndex: number,
+    stageAnswers: string[]
+  ) {
+    const questions = typeof methodology.questions.questions === 'function'
+      ? methodology.questions.questions({ currentStage: stageIndex })
+      : methodology.questions.questions;
+
+    if (questionIndex >= questions.length) {
+      // Move to next stage or complete
+      if (stageIndex + 1 < methodology.stages.length) {
+        await this.askAdvancedQuestion(parentUuid, methodology, stageIndex + 1, 0, []);
+      } else {
+        await this.completeAdvancedFlow(parentUuid, methodology, stageAnswers);
+      }
+      return;
+    }
+
+    const question = questions[questionIndex];
+    const stageName = methodology.stages[stageIndex];
+
+    const questionBlock = await logseq.Editor.insertBlock(
+      parentUuid,
+      `#seed/question **${stageName}**: ${question}`,
+      {
+        properties: {
+          'seed-methodology': methodology.name,
+          'seed-stage': stageName,
+          'seed-question-index': `${stageIndex}-${questionIndex}`
+        },
+        sibling: false
+      }
+    );
+
+    const answerBlock = await logseq.Editor.insertBlock(
+      questionBlock.uuid,
+      '답변: ',
+      { sibling: false }
+    );
+
+    this.waitForAdvancedAnswer(answerBlock.uuid, parentUuid, methodology, stageIndex, questionIndex, stageAnswers);
+  }
+
+  private waitForAdvancedAnswer(
+    answerUuid: string,
+    parentUuid: string,
+    methodology: any,
+    stageIndex: number,
+    questionIndex: number,
+    stageAnswers: string[]
+  ) {
+    const checkAnswer = async () => {
+      const answerBlock = await logseq.Editor.getBlock(answerUuid);
+      const content = answerBlock?.content || '';
+      
+      if (content.replace('답변:', '').trim().length > 3) {
+        const answer = content.replace('답변:', '').trim();
+        const newStageAnswers = [...stageAnswers, answer];
+        
+        setTimeout(() => {
+          this.askAdvancedQuestion(parentUuid, methodology, stageIndex, questionIndex + 1, newStageAnswers);
+        }, 1000);
+        
+        return true;
+      }
+      
+      setTimeout(checkAnswer, 2000);
+      return false;
+    };
+
+    setTimeout(checkAnswer, 2000);
+  }
+
+  private async completeAdvancedFlow(parentUuid: string, methodology: any, allAnswers: string[]) {
+    await logseq.Editor.upsertBlockProperty(parentUuid, 'seed-status', 'developed');
+    
+    if (methodology.onComplete) {
+      const summary = methodology.onComplete(allAnswers);
+      await logseq.Editor.insertBlock(
+        parentUuid,
+        summary,
+        {
+          properties: {
+            'seed-analysis': methodology.name,
+            'seed-completed': new Date().toISOString()
+          },
+          sibling: false
+        }
+      );
+    }
+
+    // Suggest next methodologies
+    const suggestions = await this.advancedMethodologies.suggestNextMethodology(
+      methodology.name, 
+      await logseq.Editor.getBlock(parentUuid)
+    );
+
+    if (suggestions.length > 0) {
+      logseq.UI.showMsg(
+        `✅ ${methodology.name} 완료! 다음 방법론을 추천합니다:`,
+        'info',
+        {
+          actions: suggestions.map(method => ({
+            label: method,
+            onClick: () => this.startMethodology(parentUuid, method)
+          }))
+        }
+      );
+    }
+  }
+
+  private async startMethodology(seedUuid: string, methodologyName: string) {
+    const methodology = this.advancedMethodologies.getMethodology(methodologyName);
+    if (methodology) {
+      const block = await logseq.Editor.getBlock(seedUuid);
+      await this.startAdvancedQuestionFlow(block, methodology);
+    }
   }
 
   private async askNextQuestion(

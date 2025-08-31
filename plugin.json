@@ -1,0 +1,89 @@
+{
+  "id": "logseq-seed",
+  "title": "Seed - Idea Cultivation",
+  "description": "질문으로 키우는 아이디어 정원 - Advanced idea cultivation with TRIZ, Double Diamond, and intelligent methodologies",
+  "author": "Jamin Park",
+  "repo": "https://github.com/jaminpark/logseq-seed",
+  "icon": "🌱",
+  "theme": false,
+  "version": "0.2.0",
+  "main": "dist/index.js",
+  "targets": ["browser"],
+  "settings": {
+    "schema": [
+      {
+        "key": "captureShortcut",
+        "type": "string",
+        "default": "cmd+shift+s",
+        "title": "빠른 캡처 단축키",
+        "description": "아이디어를 빠르게 캡처하는 키보드 단축키"
+      },
+      {
+        "key": "reminderInterval",
+        "type": "number",
+        "default": 240,
+        "title": "리마인더 간격 (분)",
+        "description": "아이디어 발전을 위한 리마인더 주기"
+      },
+      {
+        "key": "autoCluster",
+        "type": "boolean",
+        "default": true,
+        "title": "자동 그룹핑",
+        "description": "관련 아이디어 자동 연결 활성화"
+      },
+      {
+        "key": "questionFramework",
+        "type": "enum",
+        "default": "Auto",
+        "enum": ["Auto", "JTBD", "FiveWhys", "SCAMPER", "DoubleDiamond", "TRIZ", "LeanStartup", "ValueProp", "RootCause"],
+        "title": "기본 질문 프레임워크",
+        "description": "리마인더에서 사용할 기본 질문 방법론 (Auto: 상황에 맞게 자동 선택)"
+      },
+      {
+        "key": "dailyNoteIntegration",
+        "type": "boolean", 
+        "default": true,
+        "title": "Daily Note 통합",
+        "description": "새 아이디어를 자동으로 Daily Note에 추가"
+      },
+      {
+        "key": "growthStages",
+        "type": "enum",
+        "default": "4-stage",
+        "enum": ["3-stage", "4-stage", "custom"],
+        "title": "성장 단계 모델",
+        "description": "아이디어 성장 추적 모델 선택"
+      },
+      {
+        "key": "validationMode",
+        "type": "boolean",
+        "default": true,
+        "title": "검증 모드",
+        "description": "아이디어 검증을 위한 테스트 프레임워크 활성화"
+      },
+      {
+        "key": "clusteringThreshold",
+        "type": "number",
+        "default": 5,
+        "title": "클러스터링 임계값",
+        "description": "자동 클러스터링을 위한 최소 아이디어 수"
+      },
+      {
+        "key": "userExpertiseLevel",
+        "type": "enum",
+        "default": "Auto",
+        "enum": ["Auto", "Beginner", "Intermediate", "Advanced"],
+        "title": "사용자 숙련도",
+        "description": "UI 복잡도 조절을 위한 사용자 레벨 (Auto: 자동 감지)"
+      }
+    ]
+  },
+  "permissions": [
+    "read:database",
+    "write:database", 
+    "ui:items",
+    "command:palette",
+    "notification"
+  ]
+}

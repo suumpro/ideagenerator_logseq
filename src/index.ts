@@ -3,6 +3,10 @@ import { QuickCapture } from './capture';
 import { ReminderEngine } from './reminder';
 import { QuestionFramework } from './questions';
 import { ProjectTemplates } from './templates';
+import { IdeaClustering } from './clustering';
+import { ProgressiveDisclosureUI } from './ui-progressive';
+import { ValidationEngine } from './validation';
+import { AdvancedMethodologies } from './methodologies';
 
 const main = () => {
   console.log('🌱 Seed Plugin Loaded');
@@ -12,6 +16,10 @@ const main = () => {
   const reminderEngine = new ReminderEngine();
   const questionFramework = new QuestionFramework();
   const projectTemplates = new ProjectTemplates();
+  const ideaClustering = new IdeaClustering();
+  const progressiveUI = new ProgressiveDisclosureUI();
+  const validationEngine = new ValidationEngine();
+  const advancedMethodologies = new AdvancedMethodologies();
 
   // Register keyboard shortcuts
   logseq.App.registerCommandPalette({
@@ -39,13 +47,23 @@ const main = () => {
   logseq.Editor.registerBlockContextMenuItem('Grow Seed', async ({ uuid }) => {
     const block = await logseq.Editor.getBlock(uuid);
     if (block?.properties?.['seed-status']) {
-      questionFramework.startQuestionFlow(block);
+      // Show methodology selector for existing seeds
+      await progressiveUI.showMethodologySelector(uuid);
     } else {
       // Convert regular block to seed
       await logseq.Editor.upsertBlockProperty(uuid, 'seed-status', 'captured');
       await logseq.Editor.upsertBlockProperty(uuid, 'seed-stage', 'discover');
-      questionFramework.startQuestionFlow(block);
+      await progressiveUI.showMethodologySelector(uuid);
     }
+  });
+
+  // Additional context menu items
+  logseq.Editor.registerBlockContextMenuItem('Smart Suggestions', async ({ uuid }) => {
+    await progressiveUI.showSmartSuggestions(uuid);
+  });
+  
+  logseq.Editor.registerBlockContextMenuItem('Create Validation Plan', async ({ uuid }) => {
+    await validationEngine.createValidationPlan(uuid);
   });
 
   // Register slash commands
@@ -56,11 +74,35 @@ const main = () => {
   logseq.Editor.registerSlashCommand('Seed Project', async () => {
     projectTemplates.createProjectFromCurrentBlock();
   });
+  
+  logseq.Editor.registerSlashCommand('Seed Cluster', async () => {
+    await ideaClustering.generateClusterMap();
+  });
+  
+  logseq.Editor.registerSlashCommand('Seed Dashboard', async () => {
+    await progressiveUI.showProgressDashboard();
+  });
+  
+  logseq.Editor.registerSlashCommand('Seed Validation', async () => {
+    const currentBlock = await logseq.Editor.getCurrentBlock();
+    if (currentBlock) {
+      await validationEngine.createValidationPlan(currentBlock.uuid);
+    }
+  });
 
   // Handle UI events
   logseq.provideModel({
-    showSeedMenu: () => {
-      logseq.showMainUI();
+    showSeedMenu: async () => {
+      await progressiveUI.showProgressDashboard();
+    },
+    showMethodologySelector: async (seedUuid: string) => {
+      await progressiveUI.showMethodologySelector(seedUuid);
+    },
+    clusterIdeas: async () => {
+      await ideaClustering.generateClusterMap();
+    },
+    createValidationPlan: async (seedUuid: string) => {
+      await validationEngine.createValidationPlan(seedUuid);
     }
   });
 
