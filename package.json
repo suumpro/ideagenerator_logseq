@@ -1,0 +1,65 @@
+{
+  "name": "logseq-seed",
+  "version": "0.1.0",
+  "description": "질문으로 키우는 아이디어 정원 - LogSeq plugin for idea cultivation through questioning",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --outfile=dist/index.js --format=iife --global-name=SeedPlugin --platform=browser",
+    "dev": "npm run build -- --watch",
+    "lint": "eslint src --ext .ts,.js",
+    "test": "jest"
+  },
+  "keywords": ["logseq", "plugin", "idea", "brainstorming", "creativity"],
+  "author": "Jamin Park",
+  "license": "MIT",
+  "dependencies": {
+    "@logseq/libs": "^0.0.15"
+  },
+  "devDependencies": {
+    "esbuild": "^0.19.0",
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0"
+  },
+  "logseq": {
+    "id": "logseq-seed",
+    "title": "Seed - Idea Cultivation",
+    "icon": "🌱",
+    "settings": {
+      "schema": [
+        {
+          "key": "captureShortcut",
+          "type": "string",
+          "default": "cmd+shift+s",
+          "title": "빠른 캡처 단축키",
+          "description": "아이디어를 빠르게 캡처하는 키보드 단축키"
+        },
+        {
+          "key": "reminderInterval",
+          "type": "number",
+          "default": 240,
+          "title": "리마인더 간격 (분)",
+          "description": "아이디어 발전을 위한 리마인더 주기"
+        },
+        {
+          "key": "autoCluster",
+          "type": "boolean",
+          "default": true,
+          "title": "자동 그룹핑",
+          "description": "관련 아이디어 자동 연결"
+        },
+        {
+          "key": "questionFramework",
+          "type": "enum",
+          "default": "JTBD",
+          "enum": ["JTBD", "FiveWhys", "SCAMPER", "All"],
+          "title": "기본 질문 프레임워크"
+        }
+      ]
+    }
+  }
+}
