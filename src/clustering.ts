@@ -100,7 +100,8 @@ export class IdeaClustering {
     const intersection = new Set([...set1].filter(x => set2.has(x)));
     const union = new Set([...set1, ...set2]);
     
-    return intersection.size / union.size; // Jaccard similarity
+    if (union.size === 0) return 0;
+    return intersection.size / union.size;
   }
 
   private generateClusterTheme(keywords: string[], ideas: any[]): string {
@@ -204,29 +205,49 @@ ${cluster.ideas.map(idea => `- ((${idea.uuid}))`).join('\n')}
   async generateClusterMap(): Promise<string> {
     const clusters = await this.clusterAllSeeds();
     
+    if (clusters.length === 0) {
+      logseq.UI.showMsg('클러스터링할 아이디어가 충분하지 않습니다.', 'warning');
+      return '';
+    }
+
+    const totalIdeas = clusters.reduce((sum, c) => sum + c.ideas.length, 0);
+    const avgClusterSize = clusters.length > 0 ? Math.round(totalIdeas / clusters.length) : 0;
+    
     const mapContent = `# 🗺️ 아이디어 클러스터 맵
 
 ## 📊 전체 개요
 - **총 클러스터**: ${clusters.length}개
-- **총 아이디어**: ${clusters.reduce((sum, c) => sum + c.ideas.length, 0)}개
-- **평균 클러스터 크기**: ${Math.round(clusters.reduce((sum, c) => sum + c.ideas.length, 0) / clusters.length)}개
+- **총 아이디어**: ${totalIdeas}개
+- **평균 클러스터 크기**: ${avgClusterSize}개
+- **생성일**: ${new Date().toLocaleDateString('ko-KR')}
 
 ## 🏆 주요 클러스터들 (강도순)
 ${clusters.slice(0, 5).map((cluster, index) => 
   `${index + 1}. **${cluster.theme}** (${cluster.ideas.length}개, 강도: ${cluster.strength})`
 ).join('\n')}
 
-## 📈 클러스터 상세
-${clusters.map(cluster => `
-### ${cluster.theme}
+## 📌 추천 액션
+${clusters.length > 2 ? '- [[#클러스터 비교 분석]] 실행' : ''}
+${clusters.some(c => c.ideas.length > 5) ? '- 대형 클러스터 세분화 고려' : ''}
+- 유사 아이디어 병합 기회 탐색
+
+## 📊 클러스터 상세
+${clusters.map((cluster, index) => `
+### ${index + 1}. ${cluster.theme}
 - **아이디어 수**: ${cluster.ideas.length}개
 - **강도**: ${cluster.strength}/100
 - **키워드**: ${cluster.commonKeywords.slice(0, 3).join(', ')}
 - **페이지**: [[Cluster: ${cluster.theme}]]
+- **아이디어 링크**: ${cluster.ideas.map(idea => `((${idea.uuid}))`).join(' ')}
 `).join('\n')}
 
 ## 🔗 클러스터 간 연결
 {{query (and (tag #seed/cluster) (not (page [[${new Date().toLocaleDateString('ko-KR')}]])))}}
+
+## 🤝 병합 기회
+${(await this.suggestMergeOpportunities()).map(opp => 
+  `- ((${opp.seed1})) + ((${opp.seed2})) - ${opp.reason} (유사도: ${opp.similarity}%)`
+).join('\n')}
 
 #seed/map #analysis/cluster`;
 
@@ -237,6 +258,8 @@ ${clusters.map(cluster => `
     );
 
     await logseq.Editor.appendBlockInPage(mapPage.name, mapContent);
+    
+    logseq.UI.showMsg(`🗺️ ${clusters.length}개 클러스터 맵이 생성되었습니다!`, 'success');
     
     return mapPage.name;
   }
@@ -262,9 +285,9 @@ ${clusters.map(cluster => `
     `);
   }
 
-  async suggestMergeOpportunities(): Promise<{seed1: string, seed2: string, reason: string}[]> {
+  async suggestMergeOpportunities(): Promise<{seed1: string, seed2: string, reason: string, similarity: number}[]> {
     const allSeeds = await this.getAllSeeds();
-    const opportunities: {seed1: string, seed2: string, reason: string}[] = [];
+    const opportunities: {seed1: string, seed2: string, reason: string, similarity: number}[] = [];
 
     for (let i = 0; i < allSeeds.length; i++) {
       for (let j = i + 1; j < allSeeds.length; j++) {
@@ -275,16 +298,60 @@ ${clusters.map(cluster => `
         const keywords2 = this.extractKeywords(seed2.content);
         const similarity = this.calculateSimilarity(keywords1, keywords2);
 
-        if (similarity > 0.6) { // High similarity threshold for merge suggestions
+        if (similarity > 0.6) {
+          const commonKeywords = keywords1.filter(kw => keywords2.includes(kw));
           opportunities.push({
             seed1: seed1.uuid,
             seed2: seed2.uuid,
-            reason: `공통 키워드: ${keywords1.filter(kw => keywords2.includes(kw)).join(', ')}`
+            reason: `공통 키워드: ${commonKeywords.join(', ')}`,
+            similarity: Math.round(similarity * 100)
           });
         }
       }
     }
 
-    return opportunities.slice(0, 5); // Top 5 opportunities
+    return opportunities
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 5);
+  }
+
+  async createMergeProposal(seed1Uuid: string, seed2Uuid: string): Promise<string> {
+    const seed1 = await logseq.Editor.getBlock(seed1Uuid);
+    const seed2 = await logseq.Editor.getBlock(seed2Uuid);
+    
+    if (!seed1 || !seed2) {
+      throw new Error('Seeds not found for merge');
+    }
+
+    const mergedContent = `# 🔗 Merged Seed: ${seed1.content.replace('#seed/idea', '').trim()} + ${seed2.content.replace('#seed/idea', '').trim()}
+
+## 원본 아이디어들
+### Seed 1
+((${seed1Uuid}))
+
+### Seed 2  
+((${seed2Uuid}))
+
+## 통합 아이디어
+#seed/idea 
+
+## 시너지 효과
+- 
+
+## 다음 단계
+- [ ] 통합 아이디어 구체화
+- [ ] 각 요소의 장점 활용 방안
+- [ ] 예상 문제점 분석
+
+#seed/merged`;
+
+    const mergedPageName = `Merged: ${new Date().toISOString().split('T')[0]}-${Math.random().toString(36).substr(2, 6)}`;
+    const mergedPage = await logseq.Editor.createPage(mergedPageName);
+    await logseq.Editor.appendBlockInPage(mergedPage.name, mergedContent);
+
+    await logseq.Editor.upsertBlockProperty(seed1Uuid, 'seed-merged-into', `[[${mergedPageName}]]`);
+    await logseq.Editor.upsertBlockProperty(seed2Uuid, 'seed-merged-into', `[[${mergedPageName}]]`);
+
+    return mergedPageName;
   }
 }

@@ -1,5 +1,12 @@
 import '@logseq/libs';
 
+export interface ExportOptions {
+  format: 'markdown' | 'json' | 'csv' | 'html';
+  includeMetadata: boolean;
+  includeAnalysis: boolean;
+  dateRange?: { start: Date; end: Date };
+}
+
 export class SeedExporter {
   async exportToMarkdown(seedUuid: string): Promise<string> {
     const seedBlock = await logseq.Editor.getBlock(seedUuid);
@@ -129,20 +136,26 @@ ${allSeeds
     const allSeeds = await this.getAllSeeds();
     const backup = {
       exported: new Date().toISOString(),
-      version: '0.1.0',
+      version: '0.2.0',
+      pluginVersion: '0.2.0',
+      totalSeeds: allSeeds.length,
       seeds: allSeeds.map(seed => ({
         uuid: seed.uuid,
         content: seed.content,
         properties: seed.properties,
         page: seed.page?.name,
         created: seed['created-at'],
-        updated: seed['updated-at']
+        updated: seed['updated-at'],
+        children: seed.children?.map((child: any) => ({
+          uuid: child.uuid,
+          content: child.content,
+          properties: child.properties
+        })) || []
       }))
     };
 
     const backupJson = JSON.stringify(backup, null, 2);
     
-    // Download as file
     const blob = new Blob([backupJson], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -151,6 +164,77 @@ ${allSeeds
     a.click();
     URL.revokeObjectURL(url);
 
-    logseq.UI.showMsg('🌱 Seed 백업이 완료되었습니다!', 'success');
+    logseq.UI.showMsg(`🌱 ${allSeeds.length}개 Seed 백업이 완료되었습니다!`, 'success');
+  }
+
+  async exportToCSV(): Promise<string> {
+    const allSeeds = await this.getAllSeeds();
+    
+    const headers = ['ID', 'Content', 'Status', 'Stage', 'Created', 'Last Activity', 'Page', 'Methodology'];
+    const rows = allSeeds.map(seed => [
+      seed.properties?.['seed-id'] || seed.uuid,
+      seed.content.replace('#seed/idea', '').trim().replace(/"/g, '""'),
+      seed.properties?.['seed-status'] || '',
+      seed.properties?.['seed-stage'] || '',
+      seed.properties?.['seed-created'] || '',
+      seed.properties?.['seed-last-activity'] || '',
+      seed.page?.name || '',
+      seed.properties?.['seed-methodology'] || ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `seeds-export-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    return csvContent;
+  }
+
+  async exportFilteredSeeds(filter: (seed: any) => boolean, filename?: string): Promise<string> {
+    const allSeeds = await this.getAllSeeds();
+    const filteredSeeds = allSeeds.filter(filter);
+    
+    const exportData = {
+      exported: new Date().toISOString(),
+      filter: 'Custom Filter Applied',
+      count: filteredSeeds.length,
+      seeds: filteredSeeds.map(seed => ({
+        content: seed.content,
+        properties: seed.properties,
+        analysis: this.extractAnalysisFromSeed(seed)
+      }))
+    };
+
+    const jsonContent = JSON.stringify(exportData, null, 2);
+    
+    if (filename) {
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    return jsonContent;
+  }
+
+  private extractAnalysisFromSeed(seed: any): any {
+    return {
+      hasQuestions: seed.children?.some((c: any) => c.content.includes('#seed/question')) || false,
+      answerCount: seed.children?.filter((c: any) => c.content.includes('답변:')).length || 0,
+      methodology: seed.properties?.['seed-methodology'],
+      clustered: !!seed.properties?.['seed-cluster'],
+      validated: !!seed.properties?.['seed-validation-plan']
+    };
   }
 }

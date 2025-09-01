@@ -167,22 +167,43 @@ export class ValidationEngine {
   }
 
   async createValidationPlan(seedUuid: string): Promise<string> {
-    const seedBlock = await logseq.Editor.getBlock(seedUuid);
-    const analysis = await this.analyzeValidationNeeds(seedBlock);
-    
-    const recommendedFrameworks = this.recommendValidationFramework(analysis);
-    const plan = await this.generateValidationPlan(seedBlock, recommendedFrameworks);
+    try {
+      const seedBlock = await logseq.Editor.getBlock(seedUuid);
+      if (!seedBlock) {
+        throw new Error('Seed block not found');
+      }
 
-    const planPageName = `Validation Plan: ${seedBlock.content.replace('#seed/idea', '').trim().slice(0, 30)}`;
-    const planPage = await logseq.Editor.createPage(planPageName);
+      const analysis = await this.analyzeValidationNeeds(seedBlock);
+      const recommendedFrameworks = this.recommendValidationFramework(analysis);
+      const plan = await this.generateValidationPlan(seedBlock, recommendedFrameworks);
 
-    await logseq.Editor.appendBlockInPage(planPage.name, plan);
+      const ideaTitle = seedBlock.content.replace('#seed/idea', '').trim().slice(0, 30);
+      const planPageName = `Validation Plan: ${ideaTitle}`;
+      
+      const existingPage = await logseq.Editor.getPage(planPageName);
+      let planPage;
+      
+      if (existingPage) {
+        planPage = existingPage;
+        logseq.UI.showMsg('기존 검증 계획을 업데이트합니다.', 'info');
+      } else {
+        planPage = await logseq.Editor.createPage(planPageName);
+      }
 
-    // Link back to original seed
-    await logseq.Editor.upsertBlockProperty(seedUuid, 'seed-validation-plan', `[[${planPageName}]]`);
-    await logseq.Editor.upsertBlockProperty(seedUuid, 'seed-status', 'validating');
+      await logseq.Editor.appendBlockInPage(planPage.name, plan);
 
-    return planPageName;
+      await logseq.Editor.upsertBlockProperty(seedUuid, 'seed-validation-plan', `[[${planPageName}]]`);
+      await logseq.Editor.upsertBlockProperty(seedUuid, 'seed-status', 'validating');
+      await logseq.Editor.upsertBlockProperty(seedUuid, 'seed-validation-created', new Date().toISOString());
+
+      logseq.UI.showMsg(`🧪 검증 계획이 생성되었습니다: ${planPageName}`, 'success');
+      
+      return planPageName;
+    } catch (error) {
+      console.error('Failed to create validation plan:', error);
+      logseq.UI.showMsg('검증 계획 생성에 실패했습니다.', 'error');
+      throw error;
+    }
   }
 
   private async analyzeValidationNeeds(seedBlock: any) {
@@ -538,23 +559,62 @@ ${test.questions.map(q => `- ${q.replace('?', '')}에 대해 긍정적 답변 70
     
     if (progress === 0) {
       nextActions.push('첫 번째 테스트 시작하기');
+      nextActions.push('참가자 모집 준비');
     } else if (progress < 30) {
       const nextIncomplete = checkboxes.find(cb => !cb.completed);
       if (nextIncomplete) {
         nextActions.push(`진행: ${nextIncomplete.task}`);
       }
+      nextActions.push('초기 결과 검토');
     } else if (progress < 70) {
       nextActions.push('중간 결과 분석하기');
       nextActions.push('다음 테스트 준비하기');
+      nextActions.push('가설 업데이트 고려');
     } else if (progress < 100) {
       nextActions.push('최종 테스트 완료하기');
       nextActions.push('전체 결과 종합하기');
+      nextActions.push('스테이크홀더 리뷰 준비');
     } else {
       nextActions.push('검증 결과 기반 의사결정');
       nextActions.push('다음 단계 계획 수립');
+      nextActions.push('MVP 또는 프로토타입 개발 시작');
     }
 
-    return nextActions;
+    return nextActions.slice(0, 3);
+  }
+
+  async quickValidationCheck(seedUuid: string): Promise<{
+    readiness: number;
+    recommendations: string[];
+    blockers: string[];
+  }> {
+    const seedBlock = await logseq.Editor.getBlock(seedUuid);
+    const tree = await logseq.Editor.getBlockTree(seedUuid);
+    
+    let readiness = 0;
+    const recommendations = [];
+    const blockers = [];
+    
+    if (seedBlock.properties?.['seed-status'] === 'developed') readiness += 30;
+    if (tree?.children?.some((c: any) => c.content.includes('답변:'))) readiness += 20;
+    if (seedBlock.properties?.['seed-analysis']) readiness += 25;
+    if (tree?.children?.length > 5) readiness += 15;
+    if (seedBlock.properties?.['seed-methodology']) readiness += 10;
+    
+    if (readiness < 30) {
+      blockers.push('아이디어가 충분히 발전되지 않음');
+      recommendations.push('더 많은 질문과 답변 필요');
+    }
+    
+    if (readiness >= 50) {
+      recommendations.push('문제 검증부터 시작');
+    }
+    
+    if (readiness >= 70) {
+      recommendations.push('솔루션 검증 고려');
+    }
+    
+    return { readiness, recommendations, blockers };
   }
 
   async generateValidationReport(seedUuid: string): Promise<string> {

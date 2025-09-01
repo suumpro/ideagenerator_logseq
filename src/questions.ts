@@ -3,8 +3,8 @@ import { AdvancedMethodologies, QuantityToQuality } from './methodologies';
 
 interface QuestionPack {
   name: string;
-  questions: string[] | ((previousAnswer?: string, depth?: number) => string);
-  onComplete?: (answers: string[]) => string;
+  questions: string[] | ((_previousAnswer?: string, _depth?: number) => string);
+  onComplete?: (_answers: string[]) => string;
   maxDepth?: number;
 }
 
@@ -398,14 +398,10 @@ ${answers.map((answer, i) => {
   }
 
   private async addMoreQuestions(seedUuid: string) {
-    // Show framework selection dialog
     const frameworks = Array.from(this.questionPacks.keys());
-    
-    // For now, cycle through frameworks
     const currentFramework = logseq.settings?.questionFramework || 'JTBD';
     const nextFramework = frameworks[(frameworks.indexOf(currentFramework) + 1) % frameworks.length];
     
-    const block = await logseq.Editor.getBlock(seedUuid);
     const nextPack = this.questionPacks.get(nextFramework);
     
     if (nextPack) {

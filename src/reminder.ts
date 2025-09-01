@@ -4,9 +4,10 @@ export class ReminderEngine {
   private reminders: Map<string, NodeJS.Timeout> = new Map();
   private checkInterval: number;
   private isRunning: boolean = false;
+  private periodicTimer?: NodeJS.Timeout;
 
   constructor() {
-    this.checkInterval = (logseq.settings?.reminderInterval || 240) * 60 * 1000; // minutes to ms
+    this.checkInterval = (logseq.settings?.reminderInterval || 240) * 60 * 1000;
     this.setupEventListeners();
   }
 
@@ -22,6 +23,13 @@ export class ReminderEngine {
     this.isRunning = false;
     this.reminders.forEach(timer => clearTimeout(timer));
     this.reminders.clear();
+    
+    if (this.periodicTimer) {
+      clearTimeout(this.periodicTimer);
+      this.periodicTimer = undefined;
+    }
+    
+    console.log('🌱 Reminder engine stopped');
   }
 
   private setupEventListeners() {
@@ -45,30 +53,47 @@ export class ReminderEngine {
   private schedulePeriodicCheck() {
     if (!this.isRunning) return;
 
-    setTimeout(async () => {
-      await this.checkIdleIdeas();
+    this.periodicTimer = setTimeout(async () => {
+      try {
+        await this.checkIdleIdeas();
+      } catch (error) {
+        console.error('Error in periodic check:', error);
+      }
+      
       this.schedulePeriodicCheck();
     }, this.checkInterval);
   }
 
   private async checkIdleIdeas() {
     try {
-      // Query for captured seeds that haven't been active
+      const reminderIntervalHours = (logseq.settings?.reminderInterval || 240) / 60;
+      
       const idleSeeds = await logseq.DB.q(`
         [:find (pull ?b [*])
          :where 
          [?b :block/properties ?props]
          [(get ?props :seed-status) ?status]
-         [(= ?status "captured")]]
+         [(contains? #{"captured" "questioning"} ?status)]]
       `);
 
+      const now = Date.now();
+      
       for (const seed of idleSeeds) {
         const lastActivity = seed.properties?.['seed-last-activity'];
+        const reminderSent = seed.properties?.['seed-last-reminder'];
+        
         if (lastActivity) {
-          const hoursSince = (Date.now() - new Date(lastActivity).getTime()) / (1000 * 60 * 60);
+          const hoursSince = (now - new Date(lastActivity).getTime()) / (1000 * 60 * 60);
+          const reminderHoursSince = reminderSent ? 
+            (now - new Date(reminderSent).getTime()) / (1000 * 60 * 60) : Infinity;
           
-          if (hoursSince >= 4) {
+          if (hoursSince >= reminderIntervalHours && reminderHoursSince >= reminderIntervalHours) {
             await this.showGrowthPrompt(seed);
+            await logseq.Editor.upsertBlockProperty(
+              seed.uuid, 
+              'seed-last-reminder', 
+              new Date().toISOString()
+            );
           }
         }
       }
@@ -80,22 +105,22 @@ export class ReminderEngine {
   private async showGrowthPrompt(block: any) {
     const questions = this.getContextualQuestions(block);
     const question = questions[0];
+    const ideaPreview = block.content.replace('#seed/idea', '').trim().slice(0, 40);
 
-    // Update block to show it's being prompted
-    await logseq.Editor.upsertBlockProperty(block.uuid, 'seed-status', 'prompted');
-
-    // Show notification with action
     logseq.UI.showMsg(
-      `💡 "${block.content.replace('#seed/idea', '').trim()}" 아이디어를 발전시켜보세요:\n\n${question}`,
+      `💡 "${ideaPreview}${ideaPreview.length > 40 ? '...' : ''}" 아이디어를 발전시켜보세요:\n\n${question}`,
       'info',
       {
-        timeout: 0,
+        timeout: 15000,
         actions: [{
           label: '답변하기',
           onClick: () => this.openQuestionFlow(block, questions)
         }, {
-          label: '나중에',
-          onClick: () => this.snoozeReminder(block.uuid, 2 * 60 * 60 * 1000) // 2 hours
+          label: '2시간 후',
+          onClick: () => this.snoozeReminder(block.uuid, 2 * 60 * 60 * 1000)
+        }, {
+          label: '내일',
+          onClick: () => this.snoozeReminder(block.uuid, 24 * 60 * 60 * 1000)
         }]
       }
     );

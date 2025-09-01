@@ -17,11 +17,13 @@ LogSeq Seed 플러그인은 3단계로 개발됩니다:
 - [x] 5 Whys 체인
 - [x] SCAMPER 창의적 사고
 
-### Phase 3: 문서 자동화 ✅
+### Phase 3: 고급 기능 ✅
+- [x] TRIZ, Double Diamond 등 고급 방법론
+- [x] 아이디어 클러스터링 & 패턴 분석
+- [x] 검증 프레임워크 & 테스트 계획
 - [x] 프로젝트 템플릿 자동 생성
-- [x] 블록 자동 연결
-- [x] 진행률 트래킹
-- [x] Markdown/JSON 내보내기
+- [x] 진행률 트래킹 & 스마트 추천
+- [x] 다중 포맷 내보내기 (Markdown/JSON/CSV)
 
 ## 🏗️ 아키텍처 상세
 

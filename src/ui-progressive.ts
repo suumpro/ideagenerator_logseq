@@ -77,7 +77,7 @@ export class ProgressiveDisclosureUI {
     logseq.showMainUI();
   }
 
-  private async detectUserLevel(seedUuid: string): Promise<string> {
+  private async detectUserLevel(_seedUuid: string): Promise<string> {
     // Analyze user's question answering patterns and complexity
     const userSeeds = await logseq.DB.q(`
       [:find (pull ?b [*])
@@ -428,35 +428,39 @@ export class ProgressiveDisclosureUI {
 
   private async executeRecommendedAction(actionId: string, seedUuid?: string) {
     switch (actionId) {
-      case 'cluster-ideas':
+      case 'cluster-ideas': {
         const { IdeaClustering } = await import('./clustering');
         const clustering = new IdeaClustering();
         await clustering.generateClusterMap();
         break;
+      }
 
       case 'continue-questioning':
         await this.findAndContinueQuestioning();
         break;
 
-      case 'create-project':
+      case 'create-project': {
         if (seedUuid) {
           const { ProjectTemplates } = await import('./templates');
           const templates = new ProjectTemplates();
           await templates.createProjectFromSeed(seedUuid);
         }
         break;
+      }
 
-      case 'generate-report':
+      case 'generate-report': {
         const { SeedExporter } = await import('./export');
         const exporter = new SeedExporter();
         await exporter.exportGardenOverview();
         break;
+      }
 
-      case 'quick-capture':
+      case 'quick-capture': {
         const { QuickCapture } = await import('./capture');
         const capture = new QuickCapture();
         await capture.showCaptureDialog();
         break;
+      }
     }
 
     logseq.hideMainUI();

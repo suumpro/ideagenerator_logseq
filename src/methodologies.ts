@@ -6,13 +6,13 @@ export interface Methodology {
   stages: string[];
   questions: QuestionSet;
   triggers: string[];
-  onComplete?: (answers: string[]) => string;
+  onComplete?: (_answers: string[]) => string;
 }
 
 export interface QuestionSet {
   stage: string;
   questions: string[] | ((context: any) => string[]);
-  followUp?: (answer: string, context: any) => string[];
+  followUp?: (_answer: string, _context: any) => string[];
 }
 
 export class AdvancedMethodologies {
@@ -342,7 +342,6 @@ export class QuantityToQuality {
   private questionThreshold = 10; // 10개 질문답변마다 종합
 
   async checkForQualityUpgrade(seedUuid: string): Promise<boolean> {
-    const seedBlock = await logseq.Editor.getBlock(seedUuid);
     const children = await logseq.Editor.getBlockTree(seedUuid);
     
     if (!children?.children) return false;
@@ -435,12 +434,11 @@ ${patterns.nextSteps.map(step => `- [ ] ${step}`).join('\n')}`,
     return clusters;
   }
 
-  private async analyzeQuestionPatterns(questions: any[]): Promise<{
+  private async analyzeQuestionPatterns(_questions: any[]): Promise<{
     themes: string[];
     gaps: string[];
     nextSteps: string[];
   }> {
-    // 질문 답변에서 패턴 분석 (향후 AI로 고도화)
     const themes = ['사용자 중심 사고', '기술적 실현가능성', '비즈니스 가치'];
     const gaps = ['구체적 검증 방법', '경쟁사 분석', '수익 모델'];
     const nextSteps = ['프로토타입 제작', '사용자 인터뷰', '시장 조사'];
@@ -458,7 +456,6 @@ ${patterns.nextSteps.map(step => `- [ ] ${step}`).join('\n')}`,
   }
 
   async generateProgressReport(seedUuid: string): Promise<string> {
-    const seedBlock = await logseq.Editor.getBlock(seedUuid);
     const tree = await logseq.Editor.getBlockTree(seedUuid);
     
     if (!tree?.children) return "진행 상황을 파악할 수 없습니다.";
